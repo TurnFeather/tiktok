@@ -1,3 +1,53 @@
+# [](https://github.com/imgyh/tiktok/compare/v1.6.2...v) (2023-04-24)
+
+
+### Bug Fixes
+
+* **tiktok:** 优化视频链接获取 ([321d462](https://github.com/imgyh/tiktok/commit/321d4622a16a26cc8587e16c0e5b9f8601c16f99))
+* **web:** 解决浏览器提示不安全问题 ([87b48ae](https://github.com/imgyh/tiktok/commit/87b48aec06bce777c427d03ab02590fd7089bb9b))
+
+
+### Features
+
+* **tiktok:** 增加数据库功能与增量更新功能 ([ebf6671](https://github.com/imgyh/tiktok/commit/ebf6671d336767595a01941562db397546ab2fe9)), closes [#24](https://github.com/imgyh/tiktok/issues/24)
+
+
+
+# [](https://github.com/imgyh/tiktok/compare/v1.6.1...v) (2023-04-21)
+
+
+### Bug Fixes
+
+* **result:** 修复1080p清晰度链接 ([ada1851](https://github.com/imgyh/tiktok/commit/ada1851e869ae4a65a43fb07eff3c22baeced087))
+* **tiktok:** 修复接口失效问题 ([9aaab2f](https://github.com/imgyh/tiktok/commit/9aaab2f691adff5f43c0f40899b1eb37cd4665d5)), closes [#33](https://github.com/imgyh/tiktok/issues/33)
+
+
+### Features
+
+* **web:** 前段静态文件使用国内cdn ([72aca75](https://github.com/imgyh/tiktok/commit/72aca75960b0f2fe4ef918682debec5c9af8cb59))
+
+
+
+# [](https://github.com/imgyh/tiktok/compare/v1.6.0...v) (2023-04-16)
+
+
+### Bug Fixes
+
+* **command:** 修复mode命令解析问题 ([aebc144](https://github.com/imgyh/tiktok/commit/aebc14429ded01203b2d3b3385d7f1bdcbafae1a))
+* **tiktok:** 增加请求重试机制 ([8f6c1ea](https://github.com/imgyh/tiktok/commit/8f6c1ea70dd4da63c772f45f0326047deb3daef7))
+* **tiktok:** 更改多作品接口请求逻辑, 不再调用单个作品的方法 ([2ea2ac0](https://github.com/imgyh/tiktok/commit/2ea2ac07a844421d665684e3273c3b6b8e7064a6))
+* **tiktok:** 缩短文件名长度,只使用数字字母汉字作为文件名 ([99c6292](https://github.com/imgyh/tiktok/commit/99c62922ca701de2e7eccb68b3c3e67b98d9fcef)), closes [#19](https://github.com/imgyh/tiktok/issues/19)
+* **web:** 前端适配新接口 ([2f13bd5](https://github.com/imgyh/tiktok/commit/2f13bd5122b25e507cf55a58aea24396016414da))
+
+
+### Features
+
+* **command:** 未传入cookie则使用默认值 ([596a0fc](https://github.com/imgyh/tiktok/commit/596a0fc63308c2ea515c305161f115e6914f7504))
+* **web:** 增加解析接口 ([918d6c9](https://github.com/imgyh/tiktok/commit/918d6c9ebaa47ce7259fc2f23efbd53b320095a9)), closes [#28](https://github.com/imgyh/tiktok/issues/28)
+* **web:** 所有接口支持json与form两种格式, cookie不传使用默认值 ([d3d091d](https://github.com/imgyh/tiktok/commit/d3d091d9ddadf1f01588b7e273b40356ed09cfa2)), closes [#31](https://github.com/imgyh/tiktok/issues/31)
+
+
+
 # [](https://github.com/imgyh/tiktok/compare/v1.5.5...v) (2023-03-28)
 
 

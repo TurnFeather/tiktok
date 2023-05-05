@@ -39,6 +39,7 @@ from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
 from TikTokUtils import Utils
 from TikTokUrls import Urls
 from TikTokResult import Result
+from TikTokDataBase import db
 
 
 class TikTok(object):
@@ -47,10 +48,12 @@ class TikTok(object):
         self.urls = Urls()
         self.utils = Utils()
         self.result = Result()
+        self.db = db()
         self.headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
-        'referer': 'https://www.douyin.com/',
-        'Cookie': f"msToken={self.utils.generate_random_str(107)}; ttwid={self.utils.getttwid()}; odin_tt=324fb4ea4a89c0c05827e18a1ed9cf9bf8a17f7705fcc793fec935b637867e2a5a9b8168c885554d029919117a18ba69; passport_csrf_token=f61602fc63757ae0e4fd9d6bdcee4810;"
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+            'referer': 'https://www.douyin.com/',
+            'accept-encoding': None,
+            'Cookie': f"msToken={self.utils.generate_random_str(107)}; ttwid={self.utils.getttwid()}; odin_tt=324fb4ea4a89c0c05827e18a1ed9cf9bf8a17f7705fcc793fec935b637867e2a5a9b8168c885554d029919117a18ba69; passport_csrf_token=f61602fc63757ae0e4fd9d6bdcee4810;"
         }
         # 用于设置重复请求某个接口的最大时间
         self.timeout = 10
@@ -69,7 +72,6 @@ class TikTok(object):
         # )
         # self.done_event = Event()
         # signal.signal(signal.SIGINT, self.handle_sigint)
-
 
     # 从分享链接中提取网址
     def getShareLink(self, string):
@@ -144,6 +146,40 @@ class TikTok(object):
 
         return key_type, key
 
+    def getAwemeInfoApi(self, aweme_id):
+        if aweme_id is None:
+            return None
+        start = time.time()  # 开始时间
+        while True:
+            try:
+                jx_url = self.urls.POST_DETAIL + self.utils.getXbogus(
+                    url=f'aweme_id={aweme_id}&device_platform=webapp&aid=6383')
+
+                raw = requests.get(url=jx_url, headers=self.headers).text
+                datadict = json.loads(raw)
+                if datadict is not None and datadict["status_code"] == 0:
+                    break
+            except Exception as e:
+                end = time.time()  # 结束时间
+                if end - start > self.timeout:
+                    return None
+
+        # 清空self.awemeDict
+        self.result.clearDict(self.result.awemeDict)
+
+        # 默认为视频
+        awemeType = 0
+        try:
+            if datadict['aweme_detail']["images"] is not None:
+                awemeType = 1
+        except Exception as e:
+            pass
+
+        # 转换成我们自己的格式
+        self.result.dataConvert(awemeType, self.result.awemeDict, datadict['aweme_detail'])
+
+        return self.result.awemeDict, datadict
+
     # 传入 aweme_id
     # 返回 数据 字典
     def getAwemeInfo(self, aweme_id):
@@ -158,18 +194,18 @@ class TikTok(object):
                 # 单作品接口返回 'aweme_detail'
                 # 主页作品接口返回 'aweme_list'->['aweme_detail']
                 jx_url = self.urls.POST_DETAIL + self.utils.getXbogus(
-                    url=f'aweme_id={aweme_id}&aid=1128&version_name=23.5.0&device_platform=android&os_version=2333')
+                    url=f'aweme_id={aweme_id}&device_platform=webapp&aid=6383')
 
                 raw = requests.get(url=jx_url, headers=self.headers).text
                 datadict = json.loads(raw)
-                if datadict is not None and datadict['aweme_detail'] is not None and datadict["status_code"] == 0:
+                if datadict is not None and datadict["status_code"] == 0:
                     break
             except Exception as e:
                 end = time.time()  # 结束时间
                 if end - start > self.timeout:
                     # raise RuntimeError("重复请求该接口" + str(self.timeout) + "s, 仍然未获取到数据")
                     print("[  提示  ]:重复请求该接口" + str(self.timeout) + "s, 仍然未获取到数据")
-                    return {},{}
+                    return {}, {}
                 # print("[  警告  ]:接口未返回数据, 正在重新请求!\r")
 
         # 清空self.awemeDict
@@ -189,28 +225,32 @@ class TikTok(object):
 
         return self.result.awemeDict, datadict
 
-
     def getUserInfoApi(self, sec_uid, mode="post", count=35, max_cursor=0):
         if sec_uid is None:
             return None
 
         awemeList = []
 
-        try:
-            if mode == "post":
-                url = self.urls.USER_POST + self.utils.getXbogus(
-                    url=f'device_platform=webapp&aid=6383&os_version=10&version_name=17.4.0&sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}')
-            elif mode == "like":
-                url = self.urls.USER_FAVORITE_A + self.utils.getXbogus(
-                    url=f'sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}&aid=1128&version_name=23.5.0&device_platform=android&os_version=2333')
-            else:
-                return None
+        start = time.time()  # 开始时间
+        while True:
+            try:
+                if mode == "post":
+                    url = self.urls.USER_POST + self.utils.getXbogus(
+                        url=f'sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}&device_platform=webapp&aid=6383')
+                elif mode == "like":
+                    url = self.urls.USER_FAVORITE_A + self.utils.getXbogus(
+                        url=f'sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}&device_platform=webapp&aid=6383')
+                else:
+                    return None
 
-            res = requests.get(url=url, headers=self.headers)
-            datadict = json.loads(res.text)
-
-        except Exception as e:
-            return awemeList
+                res = requests.get(url=url, headers=self.headers)
+                datadict = json.loads(res.text)
+                if datadict is not None and datadict["status_code"] == 0:
+                    break
+            except Exception as e:
+                end = time.time()  # 结束时间
+                if end - start > self.timeout:
+                    return None
 
         for aweme in datadict["aweme_list"]:
             # 清空self.awemeDict
@@ -222,7 +262,6 @@ class TikTok(object):
                 if aweme["images"] is not None:
                     awemeType = 1
             except Exception as e:
-                # print("[  警告  ]:接口中未找到 images\r")
                 pass
 
             # 转换成我们自己的格式
@@ -231,11 +270,11 @@ class TikTok(object):
             if self.result.awemeDict is not None and self.result.awemeDict != {}:
                 awemeList.append(copy.deepcopy(self.result.awemeDict))
 
-        return awemeList, datadict["max_cursor"], datadict["has_more"]
+        return awemeList, datadict, datadict["max_cursor"], datadict["has_more"]
 
     # 传入 url 支持 https://www.iesdouyin.com 与 https://v.douyin.com
     # mode : post | like 模式选择 like为用户点赞 post为用户发布
-    def getUserInfo(self, sec_uid, mode="post", count=35, number=0):
+    def getUserInfo(self, sec_uid, mode="post", count=35, number=0, increase=False):
         print('[  提示  ]:正在请求的用户 id = %s\r\n' % sec_uid)
         if sec_uid is None:
             return None
@@ -246,6 +285,8 @@ class TikTok(object):
 
         max_cursor = 0
         awemeList = []
+        increaseflag = False
+        numberis0 = False
 
         print("[  提示  ]:正在获取所有作品数据请稍后...\r")
         print("[  提示  ]:会进行多次请求，等待时间较长...\r\n")
@@ -260,10 +301,10 @@ class TikTok(object):
                 try:
                     if mode == "post":
                         url = self.urls.USER_POST + self.utils.getXbogus(
-                            url=f'device_platform=webapp&aid=6383&os_version=10&version_name=17.4.0&sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}')
+                            url=f'sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}&device_platform=webapp&aid=6383')
                     elif mode == "like":
                         url = self.urls.USER_FAVORITE_A + self.utils.getXbogus(
-                            url=f'sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}&aid=1128&version_name=23.5.0&device_platform=android&os_version=2333')
+                            url=f'sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}&device_platform=webapp&aid=6383')
                     else:
                         print("[  错误  ]:模式选择错误, 仅支持post、like、mix, 请检查后重新运行!\r")
                         return None
@@ -283,6 +324,35 @@ class TikTok(object):
                     # print("[  警告  ]:接口未返回数据, 正在重新请求!\r")
 
             for aweme in datadict["aweme_list"]:
+                # 退出条件
+                if increase is False and numflag and numberis0:
+                    break
+                if increase and numflag and numberis0 and increaseflag:
+                    break
+                # 增量更新, 找到非置顶的最新的作品发布时间
+                if mode == "post":
+                    if self.db.get_user_post(sec_uid=sec_uid, aweme_id=aweme['aweme_id']) is not None:
+                        if increase and aweme['is_top'] == 0:
+                            increaseflag = True
+                    else:
+                        self.db.insert_user_post(sec_uid=sec_uid, aweme_id=aweme['aweme_id'], data=aweme)
+                elif mode == "like":
+                    if self.db.get_user_like(sec_uid=sec_uid, aweme_id=aweme['aweme_id']) is not None:
+                        if increase and aweme['is_top'] == 0:
+                            increaseflag = True
+                    else:
+                        self.db.insert_user_like(sec_uid=sec_uid, aweme_id=aweme['aweme_id'], data=aweme)
+
+                # 退出条件
+                if increase and numflag is False and increaseflag:
+                    break
+                if increase and numflag and numberis0 and increaseflag:
+                    break
+
+                if numflag:
+                    number -= 1
+                    if number == 0:
+                        numberis0 = True
                 # 获取 aweme_id
                 # aweme_id = aweme["aweme_id"]
                 # 深拷贝 dict 不然list里面全是同样的数据
@@ -305,12 +375,14 @@ class TikTok(object):
                 if self.result.awemeDict is not None and self.result.awemeDict != {}:
                     awemeList.append(copy.deepcopy(self.result.awemeDict))
 
-                if numflag:
-                    number-=1
-                    if number==0:
-                        break
-            if numflag and number==0:
+            if increase and numflag is False and increaseflag:
+                print("\r\n[  提示  ]: [主页] 下作品增量更新数据获取完成...\r\n")
+                break
+            elif increase is False and numflag and numberis0:
                 print("\r\n[  提示  ]: [主页] 下指定数量作品数据获取完成...\r\n")
+                break
+            elif increase and numflag and numberis0 and increaseflag:
+                print("\r\n[  提示  ]: [主页] 下指定数量作品数据获取完成, 增量更新数据获取完成...\r\n")
                 break
 
             # 更新 max_cursor
@@ -325,9 +397,78 @@ class TikTok(object):
 
         return awemeList
 
-    def getLiveInfo(self, web_rid: str, option=True):
-        if option:
-            print('[  提示  ]:正在请求的直播间 id = %s\r\n' % web_rid)
+    def getLiveInfoApi(self, web_rid: str):
+        start = time.time()  # 开始时间
+        while True:
+            try:
+                live_api = self.urls.LIVE + self.utils.getXbogus(
+                    url=f'aid=6383&device_platform=web&web_rid={web_rid}')
+
+                response = requests.get(live_api, headers=self.headers)
+                live_json = json.loads(response.text)
+                if live_json != {} and live_json['status_code'] == 0:
+                    break
+            except Exception as e:
+                end = time.time()  # 结束时间
+                if end - start > self.timeout:
+                    return None
+
+        # 清空字典
+        self.result.clearDict(self.result.liveDict)
+
+        # 类型
+        self.result.liveDict["awemeType"] = 2
+        # 是否在播
+        self.result.liveDict["status"] = live_json['data']['data'][0]['status']
+
+        if self.result.liveDict["status"] == 4:
+            return self.result.liveDict, live_json
+
+        # 直播标题
+        self.result.liveDict["title"] = live_json['data']['data'][0]['title']
+
+        # 直播cover
+        self.result.liveDict["cover"] = live_json['data']['data'][0]['cover']['url_list'][0]
+
+        # 头像
+        self.result.liveDict["avatar"] = live_json['data']['data'][0]['owner']['avatar_thumb']['url_list'][0].replace(
+            "100x100", "1080x1080")
+
+        # 观看人数
+        self.result.liveDict["user_count"] = live_json['data']['data'][0]['user_count_str']
+
+        # 昵称
+        self.result.liveDict["nickname"] = live_json['data']['data'][0]['owner']['nickname']
+
+        # sec_uid
+        self.result.liveDict["sec_uid"] = live_json['data']['data'][0]['owner']['sec_uid']
+
+        # 直播间观看状态
+        self.result.liveDict["display_long"] = live_json['data']['data'][0]['room_view_stats']['display_long']
+
+        # 推流
+        self.result.liveDict["flv_pull_url"] = live_json['data']['data'][0]['stream_url']['flv_pull_url']
+
+        try:
+            # 分区
+            self.result.liveDict["partition"] = live_json['data']['partition_road_map']['partition']['title']
+            self.result.liveDict["sub_partition"] = \
+                live_json['data']['partition_road_map']['sub_partition']['partition']['title']
+        except Exception as e:
+            self.result.liveDict["partition"] = '无'
+            self.result.liveDict["sub_partition"] = '无'
+
+        flv = []
+
+        for i, f in enumerate(self.result.liveDict["flv_pull_url"].keys()):
+            flv.append(f)
+
+        self.result.liveDict["flv_pull_url0"] = self.result.liveDict["flv_pull_url"][flv[0]]
+
+        return self.result.liveDict, live_json
+
+    def getLiveInfo(self, web_rid: str):
+        print('[  提示  ]:正在请求的直播间 id = %s\r\n' % web_rid)
 
         # web_rid = live_url.replace('https://live.douyin.com/', '')
 
@@ -348,8 +489,6 @@ class TikTok(object):
                     # raise RuntimeError("重复请求该接口" + str(self.timeout) + "s, 仍然未获取到数据")
                     print("[  提示  ]:重复请求该接口" + str(self.timeout) + "s, 仍然未获取到数据")
                     return {}
-                # if option:
-                #     print("[  错误  ]:接口未返回数据, 正在重新请求!\r")
 
         # 清空字典
         self.result.clearDict(self.result.liveDict)
@@ -360,8 +499,7 @@ class TikTok(object):
         self.result.liveDict["status"] = live_json['data']['data'][0]['status']
 
         if self.result.liveDict["status"] == 4:
-            if option:
-                print('[   📺   ]:当前直播已结束，正在退出')
+            print('[   📺   ]:当前直播已结束，正在退出')
             return self.result.liveDict
 
         # 直播标题
@@ -371,7 +509,8 @@ class TikTok(object):
         self.result.liveDict["cover"] = live_json['data']['data'][0]['cover']['url_list'][0]
 
         # 头像
-        self.result.liveDict["avatar"] = live_json['data']['data'][0]['owner']['avatar_thumb']['url_list'][0].replace("100x100", "1080x1080")
+        self.result.liveDict["avatar"] = live_json['data']['data'][0]['owner']['avatar_thumb']['url_list'][0].replace(
+            "100x100", "1080x1080")
 
         # 观看人数
         self.result.liveDict["user_count"] = live_json['data']['data'][0]['user_count_str']
@@ -391,36 +530,30 @@ class TikTok(object):
         try:
             # 分区
             self.result.liveDict["partition"] = live_json['data']['partition_road_map']['partition']['title']
-            self.result.liveDict["sub_partition"] = live_json['data']['partition_road_map']['sub_partition']['partition'][
-                'title']
+            self.result.liveDict["sub_partition"] = \
+                live_json['data']['partition_road_map']['sub_partition']['partition']['title']
         except Exception as e:
             self.result.liveDict["partition"] = '无'
             self.result.liveDict["sub_partition"] = '无'
 
-        if option:
-            info = '[   💻   ]:直播间：%s  当前%s  主播：%s 分区：%s-%s\r' % (
-                self.result.liveDict["title"], self.result.liveDict["display_long"], self.result.liveDict["nickname"],
-                self.result.liveDict["partition"], self.result.liveDict["sub_partition"])
-            print(info)
+        info = '[   💻   ]:直播间：%s  当前%s  主播：%s 分区：%s-%s\r' % (
+            self.result.liveDict["title"], self.result.liveDict["display_long"], self.result.liveDict["nickname"],
+            self.result.liveDict["partition"], self.result.liveDict["sub_partition"])
+        print(info)
 
         flv = []
-        if option:
-            print('[   🎦   ]:直播间清晰度')
+        print('[   🎦   ]:直播间清晰度')
         for i, f in enumerate(self.result.liveDict["flv_pull_url"].keys()):
-            if option:
-                print('[   %s   ]: %s' % (i, f))
+            print('[   %s   ]: %s' % (i, f))
             flv.append(f)
-        if option:
-            rate = int(input('[   🎬   ]输入数字选择推流清晰度：'))
-        else:
-            rate = 0
 
-        self.result.liveDict["flv_pull_url0"] = self.result.liveDict["flv_pull_url"][flv[rate]].replace("http://", "https://")
+        rate = int(input('[   🎬   ]输入数字选择推流清晰度：'))
+
+        self.result.liveDict["flv_pull_url0"] = self.result.liveDict["flv_pull_url"][flv[rate]]
 
         # 显示清晰度列表
-        if option:
-            print('[   %s   ]:%s' % (flv[rate], self.result.liveDict["flv_pull_url"][flv[rate]]))
-            print('[   📺   ]:复制链接使用下载工具下载')
+        print('[   %s   ]:%s' % (flv[rate], self.result.liveDict["flv_pull_url"][flv[rate]]))
+        print('[   📺   ]:复制链接使用下载工具下载')
         return self.result.liveDict
 
     def getMixInfoApi(self, mix_id: str, count=35, cursor=0):
@@ -429,16 +562,20 @@ class TikTok(object):
 
         awemeList = []
 
-        try:
-            url = self.urls.USER_MIX + self.utils.getXbogus(
-                url=f'device_platform=webapp&aid=6383&os_version=10&version_name=17.4.0&mix_id={mix_id}&cursor={cursor}&count={count}')
+        start = time.time()  # 开始时间
+        while True:
+            try:
+                url = self.urls.USER_MIX + self.utils.getXbogus(
+                    url=f'mix_id={mix_id}&cursor={cursor}&count={count}&device_platform=webapp&aid=6383')
 
-            res = requests.get(url=url, headers=self.headers)
-            datadict = json.loads(res.text)
-
-        except Exception as e:
-            return awemeList
-
+                res = requests.get(url=url, headers=self.headers)
+                datadict = json.loads(res.text)
+                if datadict is not None:
+                    break
+            except Exception as e:
+                end = time.time()  # 结束时间
+                if end - start > self.timeout:
+                    return None
 
         for aweme in datadict["aweme_list"]:
 
@@ -451,7 +588,7 @@ class TikTok(object):
                 if aweme["images"] is not None:
                     awemeType = 1
             except Exception as e:
-                print("[  警告  ]:接口中未找到 images\r")
+                pass
 
             # 转换成我们自己的格式
             self.result.dataConvert(awemeType, self.result.awemeDict, aweme)
@@ -459,9 +596,9 @@ class TikTok(object):
             if self.result.awemeDict is not None and self.result.awemeDict != {}:
                 awemeList.append(copy.deepcopy(self.result.awemeDict))
 
-        return awemeList, datadict["cursor"], datadict["has_more"]
+        return awemeList, datadict, datadict["cursor"], datadict["has_more"]
 
-    def getMixInfo(self, mix_id: str, count=35, number=0):
+    def getMixInfo(self, mix_id: str, count=35, number=0, increase=False, sec_uid=''):
         print('[  提示  ]:正在请求的合集 id = %s\r\n' % mix_id)
         if mix_id is None:
             return None
@@ -472,6 +609,8 @@ class TikTok(object):
 
         cursor = 0
         awemeList = []
+        increaseflag = False
+        numberis0 = False
 
         print("[  提示  ]:正在获取合集下的所有作品数据请稍后...\r")
         print("[  提示  ]:会进行多次请求，等待时间较长...\r\n")
@@ -485,7 +624,7 @@ class TikTok(object):
                 # 接口不稳定, 有时服务器不返回数据, 需要重新获取
                 try:
                     url = self.urls.USER_MIX + self.utils.getXbogus(
-                        url=f'device_platform=webapp&aid=6383&os_version=10&version_name=17.4.0&mix_id={mix_id}&cursor={cursor}&count={count}')
+                        url=f'mix_id={mix_id}&cursor={cursor}&count={count}&device_platform=webapp&aid=6383')
 
                     res = requests.get(url=url, headers=self.headers)
                     datadict = json.loads(res.text)
@@ -502,6 +641,28 @@ class TikTok(object):
                     # print("[  警告  ]:接口未返回数据, 正在重新请求!\r")
 
             for aweme in datadict["aweme_list"]:
+                # 退出条件
+                if increase is False and numflag and numberis0:
+                    break
+                if increase and numflag and numberis0 and increaseflag:
+                    break
+                # 增量更新, 找到非置顶的最新的作品发布时间
+                if self.db.get_mix(sec_uid=sec_uid, mix_id=mix_id, aweme_id=aweme['aweme_id']) is not None:
+                    if increase and aweme['is_top'] == 0:
+                        increaseflag = True
+                else:
+                    self.db.insert_mix(sec_uid=sec_uid, mix_id=mix_id, aweme_id=aweme['aweme_id'], data=aweme)
+
+                # 退出条件
+                if increase and numflag is False and increaseflag:
+                    break
+                if increase and numflag and numberis0 and increaseflag:
+                    break
+
+                if numflag:
+                    number -= 1
+                    if number == 0:
+                        numberis0 = True
                 # 获取 aweme_id
                 # aweme_id = aweme["aweme_id"]
                 # 深拷贝 dict 不然list里面全是同样的数据
@@ -524,12 +685,14 @@ class TikTok(object):
                 if self.result.awemeDict is not None and self.result.awemeDict != {}:
                     awemeList.append(copy.deepcopy(self.result.awemeDict))
 
-                if numflag:
-                    number -= 1
-                    if number == 0:
-                        break
-            if numflag and number == 0:
-                print("\r\n[  提示  ]:[合集] 下指定数量作品数据获取完成...\r\n")
+            if increase and numflag is False and increaseflag:
+                print("\r\n[  提示  ]: [合集] 下作品增量更新数据获取完成...\r\n")
+                break
+            elif increase is False and numflag and numberis0:
+                print("\r\n[  提示  ]: [合集] 下指定数量作品数据获取完成...\r\n")
+                break
+            elif increase and numflag and numberis0 and increaseflag:
+                print("\r\n[  提示  ]: [合集] 下指定数量作品数据获取完成, 增量更新数据获取完成...\r\n")
                 break
 
             # 更新 max_cursor
@@ -551,22 +714,27 @@ class TikTok(object):
 
         mixIdlist = []
 
-        try:
-            url = self.urls.USER_MIX_LIST + self.utils.getXbogus(
-                url=f'device_platform=webapp&aid=6383&os_version=10&version_name=17.4.0&sec_user_id={sec_uid}&count={count}&cursor={cursor}')
+        start = time.time()  # 开始时间
+        while True:
+            try:
+                url = self.urls.USER_MIX_LIST + self.utils.getXbogus(
+                    url=f'sec_user_id={sec_uid}&count={count}&cursor={cursor}&device_platform=webapp&aid=6383')
 
-            res = requests.get(url=url, headers=self.headers)
-            datadict = json.loads(res.text)
-        except Exception as e:
-            return mixIdlist
+                res = requests.get(url=url, headers=self.headers)
+                datadict = json.loads(res.text)
+                if datadict is not None and datadict["status_code"] == 0:
+                    break
+            except Exception as e:
+                end = time.time()  # 结束时间
+                if end - start > self.timeout:
+                    return None
 
         for mix in datadict["mix_infos"]:
-            mixIdNameDict={}
+            mixIdNameDict = {}
             mixIdNameDict["https://www.douyin.com/collection/" + mix["mix_id"]] = mix["mix_name"]
             mixIdlist.append(mixIdNameDict)
 
-        return mixIdlist, datadict["cursor"], datadict["has_more"]
-
+        return mixIdlist, datadict, datadict["cursor"], datadict["has_more"]
 
     def getUserAllMixInfo(self, sec_uid, count=35, number=0):
         print('[  提示  ]:正在请求的用户 id = %s\r\n' % sec_uid)
@@ -592,7 +760,7 @@ class TikTok(object):
                 # 接口不稳定, 有时服务器不返回数据, 需要重新获取
                 try:
                     url = self.urls.USER_MIX_LIST + self.utils.getXbogus(
-                        url=f'device_platform=webapp&aid=6383&os_version=10&version_name=17.4.0&sec_user_id={sec_uid}&count={count}&cursor={cursor}')
+                        url=f'sec_user_id={sec_uid}&count={count}&cursor={cursor}&device_platform=webapp&aid=6383')
 
                     res = requests.get(url=url, headers=self.headers)
                     datadict = json.loads(res.text)
@@ -636,16 +804,20 @@ class TikTok(object):
 
         awemeList = []
 
-        try:
-            url = self.urls.MUSIC + self.utils.getXbogus(
-                url=f'device_platform=webapp&aid=6383&os_version=10&version_name=17.4.0&music_id={music_id}&cursor={cursor}&count={count}')
+        start = time.time()  # 开始时间
+        while True:
+            try:
+                url = self.urls.MUSIC + self.utils.getXbogus(
+                    url=f'music_id={music_id}&cursor={cursor}&count={count}&device_platform=webapp&aid=6383')
 
-            res = requests.get(url=url, headers=self.headers)
-            datadict = json.loads(res.text)
-
-        except Exception as e:
-            return awemeList
-
+                res = requests.get(url=url, headers=self.headers)
+                datadict = json.loads(res.text)
+                if datadict is not None and datadict["status_code"] == 0:
+                    break
+            except Exception as e:
+                end = time.time()  # 结束时间
+                if end - start > self.timeout:
+                    return None
 
         for aweme in datadict["aweme_list"]:
             # 清空self.awemeDict
@@ -657,7 +829,7 @@ class TikTok(object):
                 if aweme["images"] is not None:
                     awemeType = 1
             except Exception as e:
-                print("[  警告  ]:接口中未找到 images\r")
+                pass
 
             # 转换成我们自己的格式
             self.result.dataConvert(awemeType, self.result.awemeDict, aweme)
@@ -665,9 +837,9 @@ class TikTok(object):
             if self.result.awemeDict is not None and self.result.awemeDict != {}:
                 awemeList.append(copy.deepcopy(self.result.awemeDict))
 
-        return awemeList, datadict["cursor"], datadict["has_more"]
+        return awemeList, datadict, datadict["cursor"], datadict["has_more"]
 
-    def getMusicInfo(self, music_id: str, count=35, number=0):
+    def getMusicInfo(self, music_id: str, count=35, number=0, increase=False):
         print('[  提示  ]:正在请求的音乐集合 id = %s\r\n' % music_id)
         if music_id is None:
             return None
@@ -678,6 +850,8 @@ class TikTok(object):
 
         cursor = 0
         awemeList = []
+        increaseflag = False
+        numberis0 = False
 
         print("[  提示  ]:正在获取音乐集合下的所有作品数据请稍后...\r")
         print("[  提示  ]:会进行多次请求，等待时间较长...\r\n")
@@ -691,13 +865,13 @@ class TikTok(object):
                 # 接口不稳定, 有时服务器不返回数据, 需要重新获取
                 try:
                     url = self.urls.MUSIC + self.utils.getXbogus(
-                        url=f'device_platform=webapp&aid=6383&os_version=10&version_name=17.4.0&music_id={music_id}&cursor={cursor}&count={count}')
+                        url=f'music_id={music_id}&cursor={cursor}&count={count}&device_platform=webapp&aid=6383')
 
                     res = requests.get(url=url, headers=self.headers)
                     datadict = json.loads(res.text)
                     print('[  提示  ]:本次请求返回 ' + str(len(datadict["aweme_list"])) + ' 条数据\r')
                     # print('[  提示  ]:开始对 ' + str(len(datadict["aweme_list"])) + ' 条数据请求作品详情\r\n')
-                    if datadict is not None:
+                    if datadict is not None and datadict["status_code"] == 0:
                         break
                 except Exception as e:
                     end = time.time()  # 结束时间
@@ -708,6 +882,27 @@ class TikTok(object):
                     # print("[  警告  ]:接口未返回数据, 正在重新请求!\r")
 
             for aweme in datadict["aweme_list"]:
+                if increase is False and numflag and numberis0:
+                    break
+                if increase and numflag and numberis0 and increaseflag:
+                    break
+                # 增量更新, 找到非置顶的最新的作品发布时间
+                if self.db.get_music(music_id=music_id, aweme_id=aweme['aweme_id']) is not None:
+                    if increase and aweme['is_top'] == 0:
+                        increaseflag = True
+                else:
+                    self.db.insert_music(music_id=music_id, aweme_id=aweme['aweme_id'], data=aweme)
+
+                # 退出条件
+                if increase and numflag is False and increaseflag:
+                    break
+                if increase and numflag and numberis0 and increaseflag:
+                    break
+
+                if numflag:
+                    number -= 1
+                    if number == 0:
+                        numberis0 = True
                 # 获取 aweme_id
                 # aweme_id = aweme["aweme_id"]
                 # 深拷贝 dict 不然list里面全是同样的数据
@@ -730,12 +925,14 @@ class TikTok(object):
                 if self.result.awemeDict is not None and self.result.awemeDict != {}:
                     awemeList.append(copy.deepcopy(self.result.awemeDict))
 
-                if numflag:
-                    number -= 1
-                    if number == 0:
-                        break
-            if numflag and number == 0:
-                print("\r\n[  提示  ]:[音乐集合] 下指定数量作品数据获取完成...\r\n")
+            if increase and numflag is False and increaseflag:
+                print("\r\n[  提示  ]: [音乐集合] 下作品增量更新数据获取完成...\r\n")
+                break
+            elif increase is False and numflag and numberis0:
+                print("\r\n[  提示  ]: [音乐集合] 下指定数量作品数据获取完成...\r\n")
+                break
+            elif increase and numflag and numberis0 and increaseflag:
+                print("\r\n[  提示  ]: [音乐集合] 下指定数量作品数据获取完成, 增量更新数据获取完成...\r\n")
                 break
 
             # 更新 cursor
@@ -808,7 +1005,7 @@ class TikTok(object):
 
         try:
             # 使用作品 创建时间+描述 当文件夹
-            file_name = awemeDict["create_time"] + "_" +  self.utils.replaceStr(awemeDict["desc"])
+            file_name = awemeDict["create_time"] + "_" + self.utils.replaceStr(awemeDict["desc"])
             aweme_path = os.path.join(savePath, file_name)
             if not os.path.exists(aweme_path):
                 os.mkdir(aweme_path)
@@ -821,7 +1018,7 @@ class TikTok(object):
                         f.write(json.dumps(awemeDict, ensure_ascii=False, indent=2))
                         f.close()
                 except Exception as e:
-                    print("[  错误  ]:保存 result.json 失败... 作品名: " + file_name +"\r\n")
+                    print("[  错误  ]:保存 result.json 失败... 作品名: " + file_name + "\r\n")
 
             desc = file_name[:30]
             # 下载  视频
@@ -834,7 +1031,7 @@ class TikTok(object):
                     pass
                 else:
                     try:
-                        url = awemeDict["video"]["play_addr"]["url_list"]
+                        url = awemeDict["video"]["play_addr"]["url_list"][0]
                         if url != "":
                             self.isdwownload = False
                             # task_id = self.progress.add_task("download", filename="[ 视频 ]:" + desc, start=False)
@@ -842,7 +1039,7 @@ class TikTok(object):
                             self.alltask.append(
                                 self.pool.submit(self.progressBarDownload, url, video_path, "[ 视频 ]:" + desc))
                     except Exception as e:
-                        print("[  警告  ]:视频下载失败,请重试... 作品名: " + file_name +"\r\n")
+                        print("[  警告  ]:视频下载失败,请重试... 作品名: " + file_name + "\r\n")
 
             # 下载 图集
             if awemeDict["awemeType"] == 1:
@@ -862,7 +1059,7 @@ class TikTok(object):
                                 self.alltask.append(
                                     self.pool.submit(self.progressBarDownload, url, image_path, "[ 图集 ]:" + desc))
                         except Exception as e:
-                            print("[  警告  ]:图片下载失败,请重试... 作品名: " + file_name +"\r\n")
+                            print("[  警告  ]:图片下载失败,请重试... 作品名: " + file_name + "\r\n")
 
             # 下载  音乐
             if music:
@@ -883,7 +1080,7 @@ class TikTok(object):
                             self.alltask.append(
                                 self.pool.submit(self.progressBarDownload, url, music_path, "[ 原声 ]:" + desc))
                     except Exception as e:
-                        print("[  警告  ]:音乐(原声)下载失败,请重试... 作品名: " + file_name +"\r\n")
+                        print("[  警告  ]:音乐(原声)下载失败,请重试... 作品名: " + file_name + "\r\n")
 
             # 下载  cover
             if cover and awemeDict["awemeType"] == 0:
@@ -895,7 +1092,7 @@ class TikTok(object):
                     pass
                 else:
                     try:
-                        url = awemeDict["video"]["origin_cover"]["url_list"][0]
+                        url = awemeDict["video"]["cover"]["url_list"][0]
                         if url != "":
                             self.isdwownload = False
                             # task_id = self.progress.add_task("download", filename="[ 封面 ]:" + desc, start=False)
@@ -903,7 +1100,7 @@ class TikTok(object):
                             self.alltask.append(
                                 self.pool.submit(self.progressBarDownload, url, cover_path, "[ 封面 ]:" + desc))
                     except Exception as e:
-                        print("[  警告  ]:cover下载失败,请重试... 作品名: " + file_name +"\r\n")
+                        print("[  警告  ]:cover下载失败,请重试... 作品名: " + file_name + "\r\n")
 
             # 下载  avatar
             if avatar:
@@ -923,7 +1120,7 @@ class TikTok(object):
                             self.alltask.append(
                                 self.pool.submit(self.progressBarDownload, url, avatar_path, "[ 头像 ]:" + desc))
                     except Exception as e:
-                        print("[  警告  ]:avatar下载失败,请重试... 作品名: " + file_name +"\r\n")
+                        print("[  警告  ]:avatar下载失败,请重试... 作品名: " + file_name + "\r\n")
         except Exception as e:
             print("[  错误  ]:下载作品时出错\r\n")
 
@@ -977,8 +1174,8 @@ class TikTok(object):
     #     end = time.time()  # 结束时间
     #     print('\n' + '[下载完成]:耗时: %d分钟%d秒\n' % (int((end - start) / 60), ((end - start) % 60)))  # 输出下载用时时间
 
-
-    def userDownload(self, awemeList: list, music=True, cover=True, avatar=True, resjson=True, savePath=os.getcwd(), thread=5):
+    def userDownload(self, awemeList: list, music=True, cover=True, avatar=True, resjson=True, savePath=os.getcwd(),
+                     thread=5):
         if awemeList is None:
             return
         if not os.path.exists(savePath):
@@ -990,7 +1187,8 @@ class TikTok(object):
         start = time.time()  # 开始时间
 
         for aweme in awemeList:
-            self.awemeDownload(awemeDict=aweme, music=music, cover=cover, avatar=avatar, resjson=resjson, savePath=savePath)
+            self.awemeDownload(awemeDict=aweme, music=music, cover=cover, avatar=avatar, resjson=resjson,
+                               savePath=savePath)
             # time.sleep(0.5)
         wait(self.alltask, return_when=ALL_COMPLETED)
 
@@ -1000,7 +1198,8 @@ class TikTok(object):
             self.isdwownload = True
             # 下载上一步失败的
             for aweme in awemeList:
-                self.awemeDownload(awemeDict=aweme, music=music, cover=cover, avatar=avatar, resjson=resjson, savePath=savePath)
+                self.awemeDownload(awemeDict=aweme, music=music, cover=cover, avatar=avatar, resjson=resjson,
+                                   savePath=savePath)
                 # time.sleep(0.5)
             wait(self.alltask, return_when=ALL_COMPLETED)
 
@@ -1009,6 +1208,7 @@ class TikTok(object):
 
         end = time.time()  # 结束时间
         print('\n' + '[下载完成]:耗时: %d分钟%d秒\n' % (int((end - start) / 60), ((end - start) % 60)))  # 输出下载用时时间
+
 
 if __name__ == "__main__":
     pass
