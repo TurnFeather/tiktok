@@ -1,16 +1,20 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 '''
-@Description:TikTok.py
-@Date       :2023/02/11 13:06:23
-@Author     :imgyh
-@version    :1.0
-@Github     :https://github.com/imgyh
-@Mail       :admin@imgyh.com
--------------------------------------------------
-Change Log  :
--------------------------------------------------
+@FileName   : result.py
+@Project    : apiproxy
+@Description: 
+@Author     : imgyh
+@Mail       : admin@imgyh.com
+@Github     : https://github.com/imgyh
+@Site       : https://www.imgyh.com
+@Date       : 2023/5/12 15:16
+@Version    : v1.0
+@ChangeLog 
+------------------------------------------------
+
+------------------------------------------------
 '''
 
 import time
@@ -148,6 +152,25 @@ class Result(object):
                 "width": ""
             }
         }
+        # mix信息
+        self.mixInfo = {
+            "cover_url": {
+                "height": "",
+                "uri": "",
+                "url_list": [],
+                "width": 720
+            },
+            "ids": "",
+            "is_serial_mix": "",
+            "mix_id": "",
+            "mix_name": "",
+            "mix_pic_type": "",
+            "mix_type": "",
+            "statis": {
+                "current_episode": "",
+                "updated_to_episode": ""
+            }
+        }
         # 作品信息
         self.awemeDict = {
             # 作品创建时间
@@ -164,6 +187,8 @@ class Result(object):
             "images": [],
             # 音乐
             "music": self.musicDict,
+            # 合集
+            "mix_info": self.mixInfo,
             # 视频
             "video": self.videoDict,
             # 作品信息统计
@@ -206,6 +231,8 @@ class Result(object):
             # 最清晰的地址
             "flv_pull_url0": "",
         }
+
+
 
     # 将得到的json数据（dataRaw）精简成自己定义的数据（dataNew）
     # 转换得到的数据
@@ -282,3 +309,7 @@ class Result(object):
                 data[item] = []
             else:
                 data[item] = ""
+
+
+if __name__ == '__main__':
+    pass

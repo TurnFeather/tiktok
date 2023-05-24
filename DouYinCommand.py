@@ -1,16 +1,20 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 '''
-@Description:TikTok.py
-@Date       :2023/01/27 19:36:18
-@Author     :imgyh
-@version    :1.0
-@Github     :https://github.com/imgyh
-@Mail       :admin@imgyh.com
--------------------------------------------------
-Change Log  :
--------------------------------------------------
+@FileName   : DouYinCommand.py
+@Project    : apiproxy
+@Description: 
+@Author     : imgyh
+@Mail       : admin@imgyh.com
+@Github     : https://github.com/imgyh
+@Site       : https://www.imgyh.com
+@Date       : 2023/5/12 16:01
+@Version    : v1.0
+@ChangeLog 
+------------------------------------------------
+
+------------------------------------------------
 '''
 
 import argparse
@@ -19,8 +23,11 @@ import sys
 import json
 import yaml
 import time
-from TikTok import TikTok
-from TikTokUtils import Utils
+
+from apiproxy.douyin.douyin import Douyin
+from apiproxy.douyin.download import Download
+from apiproxy.douyin import douyin_headers
+from apiproxy.common import utils
 
 configModel = {
     "link": [],
@@ -29,6 +36,7 @@ configModel = {
     "cover": True,
     "avatar": True,
     "json": True,
+    "folderstyle": True,
     "mode": ["post"],
     "number": {
         "post": 0,
@@ -37,6 +45,7 @@ configModel = {
         "mix": 0,
         "music": 0,
     },
+    'database': True,
     "increase": {
         "post": False,
         "like": False,
@@ -53,20 +62,22 @@ configModel = {
 def argument():
     parser = argparse.ArgumentParser(description='抖音批量下载工具 使用帮助')
     parser.add_argument("--cmd", "-C", help="使用命令行(True)或者配置文件(False), 默认为False",
-                        type=Utils().str2bool, required=False, default=False)
+                        type=utils.str2bool, required=False, default=False)
     parser.add_argument("--link", "-l",
                         help="作品(视频或图集)、直播、合集、音乐集合、个人主页的分享链接或者电脑浏览器网址, 可以设置多个链接(删除文案, 保证只有URL, https://v.douyin.com/kcvMpuN/ 或者 https://www.douyin.com/开头的)",
                         type=str, required=False, default=[], action="append")
     parser.add_argument("--path", "-p", help="下载保存位置, 默认当前文件位置",
                         type=str, required=False, default=os.getcwd())
     parser.add_argument("--music", "-m", help="是否下载视频中的音乐(True/False), 默认为True",
-                        type=Utils().str2bool, required=False, default=True)
+                        type=utils.str2bool, required=False, default=True)
     parser.add_argument("--cover", "-c", help="是否下载视频的封面(True/False), 默认为True, 当下载视频时有效",
-                        type=Utils().str2bool, required=False, default=True)
+                        type=utils.str2bool, required=False, default=True)
     parser.add_argument("--avatar", "-a", help="是否下载作者的头像(True/False), 默认为True",
-                        type=Utils().str2bool, required=False, default=True)
+                        type=utils.str2bool, required=False, default=True)
     parser.add_argument("--json", "-j", help="是否保存获取到的数据(True/False), 默认为True",
-                        type=Utils().str2bool, required=False, default=True)
+                        type=utils.str2bool, required=False, default=True)
+    parser.add_argument("--folderstyle", "-fs", help="文件保存风格, 默认为True",
+                        type=utils.str2bool, required=False, default=True)
     parser.add_argument("--mode", "-M", help="link是个人主页时, 设置下载发布的作品(post)或喜欢的作品(like)或者用户所有合集(mix), 默认为post, 可以设置多种模式",
                         type=str, required=False, default=[], action="append")
     parser.add_argument("--postnumber", help="主页下作品下载个数设置, 默认为0 全部下载",
@@ -79,16 +90,18 @@ def argument():
                         type=int, required=False, default=0)
     parser.add_argument("--musicnumber", help="音乐(原声)下作品下载个数设置, 默认为0 全部下载",
                         type=int, required=False, default=0)
+    parser.add_argument("--database", "-d", help="是否使用数据库, 默认为True 使用数据库; 如果不使用数据库, 增量更新不可用",
+                        type=utils.str2bool, required=False, default=True)
     parser.add_argument("--postincrease", help="是否开启主页作品增量下载(True/False), 默认为False",
-                        type=Utils().str2bool, required=False, default=False)
+                        type=utils.str2bool, required=False, default=False)
     parser.add_argument("--likeincrease", help="是否开启主页喜欢增量下载(True/False), 默认为False",
-                        type=Utils().str2bool, required=False, default=False)
+                        type=utils.str2bool, required=False, default=False)
     parser.add_argument("--allmixincrease", help="是否开启主页合集增量下载(True/False), 默认为False",
-                        type=Utils().str2bool, required=False, default=False)
+                        type=utils.str2bool, required=False, default=False)
     parser.add_argument("--mixincrease", help="是否开启单个合集下作品增量下载(True/False), 默认为False",
-                        type=Utils().str2bool, required=False, default=False)
+                        type=utils.str2bool, required=False, default=False)
     parser.add_argument("--musicincrease", help="是否开启音乐(原声)下作品增量下载(True/False), 默认为False",
-                        type=Utils().str2bool, required=False, default=False)
+                        type=utils.str2bool, required=False, default=False)
     parser.add_argument("--thread", "-t",
                         help="设置线程数, 默认5个线程",
                         type=int, required=False, default=5)
@@ -139,6 +152,11 @@ def yamlConfig():
     except Exception as e:
         print("[  警告  ]:json未设置, 使用默认值True...\r\n")
     try:
+        if configDict["folderstyle"] != None:
+            configModel["folderstyle"] = configDict["folderstyle"]
+    except Exception as e:
+        print("[  警告  ]:folderstyle未设置, 使用默认值True...\r\n")
+    try:
         if configDict["mode"] != None:
             configModel["mode"] = configDict["mode"]
     except Exception as e:
@@ -168,6 +186,11 @@ def yamlConfig():
             configModel["number"]["music"] = configDict["number"]["music"]
     except Exception as e:
         print("[  警告  ]:music number未设置, 使用默认值0...\r\n")
+    try:
+        if configDict["database"] != None:
+            configModel["database"] = configDict["database"]
+    except Exception as e:
+        print("[  警告  ]:database未设置, 使用默认值False...\r\n")
     try:
         if configDict["increase"]["post"] != None:
             configModel["increase"]["post"] = configDict["increase"]["post"]
@@ -217,7 +240,6 @@ def yamlConfig():
 def main():
     start = time.time()  # 开始时间
 
-    utils = Utils()
     args = argument()
 
     if args.cmd:
@@ -227,6 +249,7 @@ def main():
         configModel["cover"] = args.cover
         configModel["avatar"] = args.avatar
         configModel["json"] = args.json
+        configModel["folderstyle"] = args.folderstyle
         if args.mode == None or args.mode == []:
             args.mode = []
             args.mode.append("post")
@@ -236,6 +259,7 @@ def main():
         configModel["number"]["allmix"] = args.allmixnumber
         configModel["number"]["mix"] = args.mixnumber
         configModel["number"]["music"] = args.musicnumber
+        configModel["database"] = args.database
         configModel["increase"]["post"] = args.postincrease
         configModel["increase"]["like"] = args.likeincrease
         configModel["increase"]["allmix"] = args.allmixincrease
@@ -249,24 +273,32 @@ def main():
     if configModel["link"] == []:
         return
 
-    tk = TikTok()
-
     if configModel["cookie"] is not None and configModel["cookie"] != "":
-        tk.headers["Cookie"] = configModel["cookie"]
+        douyin_headers["Cookie"] = configModel["cookie"]
 
     configModel["path"] = os.path.abspath(configModel["path"])
     print("[  提示  ]:数据保存路径 " + configModel["path"])
     if not os.path.exists(configModel["path"]):
         os.mkdir(configModel["path"])
 
+    dy = Douyin(database=configModel["database"])
+    dl = Download(thread=configModel["thread"], music=configModel["music"], cover=configModel["cover"],
+                  avatar=configModel["avatar"], resjson=configModel["json"],
+                  folderstyle=configModel["folderstyle"])
+
     for link in configModel["link"]:
         print("--------------------------------------------------------------------------------")
         print("[  提示  ]:正在请求的链接: " + link + "\r\n")
-        url = tk.getShareLink(link)
-        key_type, key = tk.getKey(url)
+        url = dy.getShareLink(link)
+        key_type, key = dy.getKey(url)
         if key_type == "user":
             print("[  提示  ]:正在请求用户主页下作品\r\n")
-            userPath = os.path.join(configModel["path"], "user_" + key)
+            data = dy.getUserDetailInfo(sec_uid=key)
+            nickname = ""
+            if data is not None and data != {}:
+                nickname = utils.replaceStr(data['user']['nickname'])
+
+            userPath = os.path.join(configModel["path"], "user_" + nickname + "_" + key)
             if not os.path.exists(userPath):
                 os.mkdir(userPath)
 
@@ -274,66 +306,57 @@ def main():
                 print("--------------------------------------------------------------------------------")
                 print("[  提示  ]:正在请求用户主页模式: " + mode + "\r\n")
                 if mode == 'post' or mode == 'like':
-                    datalist = tk.getUserInfo(key, mode, 35, configModel["number"][mode], configModel["increase"][mode])
+                    datalist = dy.getUserInfo(key, mode, 35, configModel["number"][mode], configModel["increase"][mode])
                     if datalist is not None and datalist != []:
                         modePath = os.path.join(userPath, mode)
                         if not os.path.exists(modePath):
                             os.mkdir(modePath)
-                        tk.userDownload(awemeList=datalist, music=configModel["music"], cover=configModel["cover"],
-                                        avatar=configModel["avatar"], resjson=configModel["json"],
-                                        savePath=modePath, thread=configModel["thread"])
+                        dl.userDownload(awemeList=datalist, savePath=modePath)
                 elif mode == 'mix':
-                    mixIdNameDict = tk.getUserAllMixInfo(key, 35, configModel["number"]["allmix"])
+                    mixIdNameDict = dy.getUserAllMixInfo(key, 35, configModel["number"]["allmix"])
                     if mixIdNameDict is not None and mixIdNameDict != {}:
                         for mix_id in mixIdNameDict:
                             print(f'[  提示  ]:正在下载合集 [{mixIdNameDict[mix_id]}] 中的作品\r\n')
                             mix_file_name = utils.replaceStr(mixIdNameDict[mix_id])
-                            datalist = tk.getMixInfo(mix_id, 35, 0, configModel["increase"]["allmix"], key)
+                            datalist = dy.getMixInfo(mix_id, 35, 0, configModel["increase"]["allmix"], key)
                             if datalist is not None and datalist != []:
                                 modePath = os.path.join(userPath, mode)
                                 if not os.path.exists(modePath):
                                     os.mkdir(modePath)
-                                tk.userDownload(awemeList=datalist, music=configModel["music"],
-                                                cover=configModel["cover"],
-                                                avatar=configModel["avatar"], resjson=configModel["json"],
-                                                savePath=os.path.join(modePath, mix_file_name),
-                                                thread=configModel["thread"])
+                                dl.userDownload(awemeList=datalist, savePath=os.path.join(modePath, mix_file_name))
                                 print(f'[  提示  ]:合集 [{mixIdNameDict[mix_id]}] 中的作品下载完成\r\n')
         elif key_type == "mix":
             print("[  提示  ]:正在请求单个合集下作品\r\n")
-            datalist = tk.getMixInfo(key, 35, configModel["number"]["mix"], configModel["increase"]["mix"], "")
+            datalist = dy.getMixInfo(key, 35, configModel["number"]["mix"], configModel["increase"]["mix"], "")
             if datalist is not None and datalist != []:
-                mixPath = os.path.join(configModel["path"], "mix_" + key)
+                mixname = utils.replaceStr(datalist[0]["mix_info"]["mix_name"])
+                mixPath = os.path.join(configModel["path"], "mix_" + mixname + "_" + key)
                 if not os.path.exists(mixPath):
                     os.mkdir(mixPath)
-                tk.userDownload(awemeList=datalist, music=configModel["music"], cover=configModel["cover"],
-                                avatar=configModel["avatar"], resjson=configModel["json"],
-                                savePath=mixPath, thread=configModel["thread"])
+                dl.userDownload(awemeList=datalist, savePath=mixPath)
         elif key_type == "music":
             print("[  提示  ]:正在请求音乐(原声)下作品\r\n")
-            datalist = tk.getMusicInfo(key, 35, configModel["number"]["music"], configModel["increase"]["music"])
+            datalist = dy.getMusicInfo(key, 35, configModel["number"]["music"], configModel["increase"]["music"])
+
             if datalist is not None and datalist != []:
-                musicPath = os.path.join(configModel["path"], "music_" + key)
+                musicname = utils.replaceStr(datalist[0]["music"]["title"])
+                musicPath = os.path.join(configModel["path"], "music_" + musicname + "_" + key)
                 if not os.path.exists(musicPath):
                     os.mkdir(musicPath)
-                tk.userDownload(awemeList=datalist, music=configModel["music"], cover=configModel["cover"],
-                                avatar=configModel["avatar"], resjson=configModel["json"],
-                                savePath=musicPath, thread=configModel["thread"])
+                dl.userDownload(awemeList=datalist, savePath=musicPath)
         elif key_type == "aweme":
             print("[  提示  ]:正在请求单个作品\r\n")
-            datanew, dataraw = tk.getAwemeInfo(key)
+            datanew, dataraw = dy.getAwemeInfo(key)
             if datanew is not None and datanew != {}:
                 datalist = []
                 datalist.append(datanew)
                 awemePath = os.path.join(configModel["path"], "aweme")
                 if not os.path.exists(awemePath):
                     os.mkdir(awemePath)
-                tk.userDownload(awemeList=datalist, music=configModel["music"], cover=configModel["cover"],
-                                avatar=configModel["avatar"], resjson=configModel["json"],
-                                savePath=awemePath, thread=configModel["thread"])
+                dl.userDownload(awemeList=datalist, savePath=awemePath)
         elif key_type == "live":
             print("[  提示  ]:正在进行直播解析\r\n")
-            live_json = tk.getLiveInfo(key)
+            live_json = dy.getLiveInfo(key)
             if configModel["json"]:
                 livePath = os.path.join(configModel["path"], "live")
                 if not os.path.exists(livePath):

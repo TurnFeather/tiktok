@@ -1,22 +1,25 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 '''
-@Description:TikTok.py
-@Date       :2023/02/11 13:06:23
-@Author     :imgyh
-@version    :1.0
-@Github     :https://github.com/imgyh
-@Mail       :admin@imgyh.com
--------------------------------------------------
-Change Log  :
--------------------------------------------------
+@FileName   : urls.py
+@Project    : apiproxy
+@Description: 
+@Author     : imgyh
+@Mail       : admin@imgyh.com
+@Github     : https://github.com/imgyh
+@Site       : https://www.imgyh.com
+@Date       : 2023/5/12 15:04
+@Version    : v1.0
+@ChangeLog 
+------------------------------------------------
+
+------------------------------------------------
 '''
 
 
 class Urls(object):
     def __init__(self):
-        # https://langyue.cc/APIdocV1.0.html
         ######################################### WEB #########################################
         # 首页推荐
         self.TAB_FEED = 'https://www.douyin.com/aweme/v1/web/tab/feed/?'
@@ -28,11 +31,6 @@ class Urls(object):
         self.USER_DETAIL = 'https://www.douyin.com/aweme/v1/web/user/profile/other/?'
 
         # 用户作品
-        # cookies 暂时只需要 __ac_signature, s_v_web_id两个参数, 好像会过期
-        # url 暂时不需要携带 msToken, X-Bogus, _signature
-        # 每次返回数据很少
-        # self.USER_POST = 'https://m.douyin.com/web/api/v2/aweme/post/?'
-        # 2023/02/19 失效
         self.USER_POST = 'https://www.douyin.com/aweme/v1/web/aweme/post/?'
 
         # 作品信息
@@ -75,16 +73,8 @@ class Urls(object):
         # 音乐
         self.MUSIC = 'https://www.douyin.com/aweme/v1/web/music/aweme/?'
 
-        # X-Bogus Path
-        # 60 秒内,请求同一URI累计超过 600 次,封锁IP 300 秒
-        # 两个都可以用
-        # 服务器在国外
-        # self.GET_XB_PATH = 'https://tiktok.199933.xyz/xb'
-        # 服务器在国内
-        self.GET_XB_PATH = 'http://47.115.208.101:9090/xb'
-
         #######################################################################################
 
 
 if __name__ == '__main__':
-    Urls()
+    pass

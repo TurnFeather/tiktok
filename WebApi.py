@@ -1,56 +1,64 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 '''
-@Description:TikTok.py
-@Date       :2023/01/27 19:36:18
-@Author     :imgyh
-@version    :1.0
-@Github     :https://github.com/imgyh
-@Mail       :admin@imgyh.com
--------------------------------------------------
-Change Log  :
--------------------------------------------------
+@FileName   : WebApi.py
+@Project    : apiproxy
+@Description: 
+@Author     : imgyh
+@Mail       : admin@imgyh.com
+@Github     : https://github.com/imgyh
+@Site       : https://www.imgyh.com
+@Date       : 2023/5/12 18:52
+@Version    : v1.0
+@ChangeLog 
+------------------------------------------------
+
+------------------------------------------------
 '''
 
 from flask import *
-from TikTok import TikTok
+from apiproxy.douyin.douyinapi import DouyinApi
+from apiproxy.douyin import douyin_headers
 import argparse
 
 
-def work(share_link, max_cursor, mode, cookie):
-    tk = TikTok()
+def douyinwork(share_link, max_cursor, mode, cookie):
+    dy = DouyinApi()
 
     if cookie is not None and cookie != "":
-        tk.headers["Cookie"] = cookie
+        douyin_headers["Cookie"] = cookie
 
-    url = tk.getShareLink(share_link)
-    key_type, key = tk.getKey(url)
+    url = dy.getShareLink(share_link)
+    key_type, key = dy.getKey(url)
 
-    datalist = None
-    rawdatalist = None
+    data = None
+    rawdata = None
     cursor = None
     has_more = None
     if key_type == "user":
         if mode == 'post' or mode == 'like':
-            datalist, rawdatalist, cursor, has_more = tk.getUserInfoApi(sec_uid=key, mode=mode, count=35,
-                                                                        max_cursor=max_cursor)
+            data, rawdata, cursor, has_more = dy.getUserInfoApi(sec_uid=key, mode=mode, count=35,
+                                                                max_cursor=max_cursor)
         elif mode == 'mix':
-            datalist, rawdatalist, cursor, has_more = tk.getUserAllMixInfoApi(sec_uid=key, count=35, cursor=max_cursor)
+            data, rawdata, cursor, has_more = dy.getUserAllMixInfoApi(sec_uid=key, count=35, cursor=max_cursor)
+        elif mode == 'detail':
+            rawdata = dy.getUserDetailInfoApi(sec_uid=key)
+            data = rawdata
     elif key_type == "mix":
-        datalist, rawdatalist, cursor, has_more = tk.getMixInfoApi(mix_id=key, count=35, cursor=max_cursor)
+        data, rawdata, cursor, has_more = dy.getMixInfoApi(mix_id=key, count=35, cursor=max_cursor)
     elif key_type == "music":
-        datalist, rawdatalist, cursor, has_more = tk.getMusicInfoApi(music_id=key, count=35, cursor=max_cursor)
+        data, rawdata, cursor, has_more = dy.getMusicInfoApi(music_id=key, count=35, cursor=max_cursor)
     elif key_type == "aweme":
-        datalist, rawdatalist = tk.getAwemeInfoApi(aweme_id=key)
+        data, rawdata = dy.getAwemeInfoApi(aweme_id=key)
     elif key_type == "live":
-        datalist, rawdatalist = tk.getLiveInfoApi(web_rid=key)
+        data, rawdata = dy.getLiveInfoApi(web_rid=key)
 
     datadict = {}
 
-    if datalist is not None and datalist != []:
-        datadict["data"] = datalist
-        datadict["rawdata"] = rawdatalist
+    if data is not None and data != []:
+        datadict["data"] = data
+        datadict["rawdata"] = rawdata
         datadict["cursor"] = cursor
         datadict["has_more"] = has_more
         datadict["status_code"] = 200
@@ -79,7 +87,7 @@ def deal(mode=None):
 
     try:
         if share_link is not None and share_link != "":
-            usefuldict = work(share_link, cursor, mode, cookie)
+            usefuldict = douyinwork(share_link, cursor, mode, cookie)
             usefuldict["status_code"] = 200
     except Exception as e:
         usefuldict["status_code"] = 500
@@ -124,6 +132,9 @@ def douyinUserLike():
 def douyinUserPost():
     return deal(mode="post")
 
+@app.route("/douyin/user/detail", methods=["POST"])
+def douyinUserDetail():
+    return deal(mode="detail")
 
 @app.route("/douyin/aweme", methods=["POST"])
 def douyinAweme():
